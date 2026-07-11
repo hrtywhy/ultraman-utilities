@@ -81,6 +81,21 @@ export default defineConfig(({ mode }) => {
       changeOrigin: true,
       rewrite: (p) => p.replace(/^\/api\/urlscan/, ''),
     },
+    '/api/geoip': {
+      target: 'https://ipapi.co',
+      changeOrigin: true,
+      rewrite: (p) => p.replace(/^\/api\/geoip/, ''),
+    },
+    '/api/icloudrelay': {
+      target: 'https://mask-api.icloud.com',
+      changeOrigin: true,
+      rewrite: (p) => p.replace(/^\/api\/icloudrelay/, ''),
+    },
+    '/api/macvendors': {
+      target: 'https://api.macvendors.com',
+      changeOrigin: true,
+      rewrite: (p) => p.replace(/^\/api\/macvendors/, ''),
+    },
 
     // ---- Available but not yet wired into the UI (kept for future tools) ----
     '/api/mxtoolbox': {

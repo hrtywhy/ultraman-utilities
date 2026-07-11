@@ -11,10 +11,7 @@ export function ToolCard({
       <div className="tool-head" onClick={() => setCollapsed((c) => !c)}>
         <span className="tool-num">{num}</span>
         <div className="tool-title-wrap">
-          <div className="tool-title">
-            {title}
-            {live && <span className="chip chip-ok">live</span>}
-          </div>
+          <div className="tool-title">{title}</div>
           <div className="tool-desc">{desc}</div>
         </div>
         <span className="chev">▾</span>

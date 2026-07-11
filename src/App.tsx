@@ -14,7 +14,7 @@ import { RemoteFileFinder } from './tools/RemoteFileFinder';
 
 const TOOLS = [
   { id: 'ipsearch', title: 'IP Search', desc: 'Full IP triage report — geolocation, reputation, VPN/proxy, and more.', live: true, Comp: IpSearch },
-  { id: 'hashsearch', title: 'Hash Search', desc: 'Build lookup links for VirusTotal, Hybrid Analysis, Joe Sandbox.', Comp: HashSearch },
+  { id: 'hashsearch', title: 'Hash Search', desc: 'Live VirusTotal detection lookup, with Hybrid Analysis and Joe Sandbox links.', live: true, Comp: HashSearch },
   { id: 'domainsearch', title: 'Domain Search', desc: 'Live domain triage across urlscan.io, VirusTotal, OTX, and more.', live: true, Comp: DomainSearch },
   { id: 'macvendor', title: 'MAC Vendor Lookup', desc: 'Resolve a MAC address to its hardware vendor.', live: true, Comp: MacVendorLookup },
   { id: 'defang', title: 'Defang / Refang', desc: 'Neutralize or restore IPs, URLs, and emails.', Comp: Defang },

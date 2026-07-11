@@ -13,56 +13,67 @@ const HEADER_ROUTES = [
   {
     prefix: '/api/virustotal',
     target: 'https://www.virustotal.com',
+    requiredKey: 'VT_API_KEY',
     headers: (env) => ({ 'x-apikey': env.VT_API_KEY || '' }),
   },
   {
     prefix: '/api/abuseipdb',
     target: 'https://api.abuseipdb.com',
+    requiredKey: 'ABUSEIPDB_API_KEY',
     headers: (env) => ({ Key: env.ABUSEIPDB_API_KEY || '', Accept: 'application/json' }),
   },
   {
     prefix: '/api/otx',
     target: 'https://otx.alienvault.com',
+    requiredKey: 'OTX_API_KEY',
     headers: (env) => ({ 'X-OTX-API-KEY': env.OTX_API_KEY || '' }),
   },
   {
     prefix: '/api/criminalip',
     target: 'https://api.criminalip.io',
+    requiredKey: 'CRIMINALIP_API_KEY',
     headers: (env) => ({ 'x-api-key': env.CRIMINALIP_API_KEY || '' }),
   },
   {
     prefix: '/api/maltiverse',
     target: 'https://api.maltiverse.com',
+    requiredKey: 'MALTIVERSE_API_KEY',
     headers: (env) => ({ Authorization: `Bearer ${env.MALTIVERSE_API_KEY || ''}` }),
   },
   {
     prefix: '/api/apivoid',
     target: 'https://api.apivoid.com',
+    requiredKey: 'APIVOID_API_KEY',
     headers: (env) => ({ 'X-API-Key': env.APIVOID_API_KEY || '', 'Content-Type': 'application/json' }),
   },
   {
     prefix: '/api/mxtoolbox',
     target: 'https://api.mxtoolbox.com',
+    requiredKey: 'MXTOOLBOX_API_KEY',
     headers: (env) => ({ Authorization: env.MXTOOLBOX_API_KEY || '' }),
   },
   {
     prefix: '/api/censys',
     target: 'https://search.censys.io',
+    requiredKey: 'CENSYS_API_KEY_BASE64',
     headers: (env) => ({ Authorization: `Basic ${env.CENSYS_API_KEY_BASE64 || ''}` }),
   },
   {
     prefix: '/api/rosti',
     target: 'https://api.rosti.bin.re/v2',
+    requiredKey: 'ROSTI_API_KEY',
     headers: (env) => ({ 'X-API-Key': env.ROSTI_API_KEY || '' }),
   },
   {
     prefix: '/api/urlhaus',
     target: 'https://urlhaus-api.abuse.ch',
+    requiredKey: 'ABUSECH_API_KEY',
     headers: (env) => ({ 'Auth-Key': env.ABUSECH_API_KEY || '' }),
   },
   {
     prefix: '/api/threatfox',
     target: 'https://threatfox-api.abuse.ch',
+    requiredKey: 'ABUSECH_API_KEY',
     headers: (env) => ({ 'Auth-Key': env.ABUSECH_API_KEY || '' }),
   },
   {
@@ -71,13 +82,43 @@ const HEADER_ROUTES = [
     target: 'https://urlscan.io',
     headers: () => ({}),
   },
+  {
+    // No key needed. Proxied because ipapi.co sends no CORS headers, so the
+    // browser can't call it directly from the deployed site.
+    prefix: '/api/geoip',
+    target: 'https://ipapi.co',
+    headers: () => ({}),
+  },
+  {
+    // No key needed. Proxied because mask-api.icloud.com sends no CORS
+    // headers — direct browser fetches fail with "Failed to fetch".
+    prefix: '/api/icloudrelay',
+    target: 'https://mask-api.icloud.com',
+    headers: () => ({}),
+  },
+  {
+    // No key needed. Proxied for the same CORS reason as above.
+    prefix: '/api/macvendors',
+    target: 'https://api.macvendors.com',
+    headers: () => ({}),
+  },
 ];
 
 // Services that take their key as a query param rather than a header.
 const QUERY_KEY_ROUTES = [
-  { prefix: '/api/shodan', target: 'https://api.shodan.io', param: 'key', key: (env) => env.SHODAN_API_KEY },
-  { prefix: '/api/pulsedive', target: 'https://pulsedive.com', param: 'key', key: (env) => env.PULSEDIVE_API_KEY },
+  { prefix: '/api/shodan', target: 'https://api.shodan.io', param: 'key', requiredKey: 'SHODAN_API_KEY', key: (env) => env.SHODAN_API_KEY },
+  { prefix: '/api/pulsedive', target: 'https://pulsedive.com', param: 'key', requiredKey: 'PULSEDIVE_API_KEY', key: (env) => env.PULSEDIVE_API_KEY },
 ];
+
+// Forwarding a request with a blank key produces confusing upstream errors
+// (IPQS even 404s because the key lives in the URL path). Fail fast instead
+// with a clear message the UI can surface.
+function missingKeyResponse(varName) {
+  return new Response(
+    JSON.stringify({ error: `API key not configured: set the ${varName} secret (Cloudflare Pages dashboard) or .env/.dev.vars locally` }),
+    { status: 401, headers: { 'Content-Type': 'application/json' } },
+  );
+}
 
 export async function onRequest(context) {
   const { request, env } = context;
@@ -86,13 +127,15 @@ export async function onRequest(context) {
 
   // IPQS puts the key in the URL path itself: /api/json/ip/{key}/{ip}
   if (path.startsWith('/api/ipqs/')) {
+    if (!env.IPQS_API_KEY) return missingKeyResponse('IPQS_API_KEY');
     const ip = path.slice('/api/ipqs/'.length);
-    const target = `https://ipqualityscore.com/api/json/ip/${env.IPQS_API_KEY || ''}/${ip}`;
+    const target = `https://ipqualityscore.com/api/json/ip/${env.IPQS_API_KEY}/${ip}`;
     return fetch(target);
   }
 
   for (const r of QUERY_KEY_ROUTES) {
     if (path.startsWith(r.prefix)) {
+      if (r.requiredKey && !env[r.requiredKey]) return missingKeyResponse(r.requiredKey);
       const rest = path.slice(r.prefix.length);
       const targetUrl = new URL(r.target + rest);
       url.searchParams.forEach((v, k) => targetUrl.searchParams.set(k, v));
@@ -103,6 +146,7 @@ export async function onRequest(context) {
 
   for (const r of HEADER_ROUTES) {
     if (path.startsWith(r.prefix)) {
+      if (r.requiredKey && !env[r.requiredKey]) return missingKeyResponse(r.requiredKey);
       const rest = path.slice(r.prefix.length);
       const targetUrl = new URL(r.target + rest);
       url.searchParams.forEach((v, k) => targetUrl.searchParams.set(k, v));

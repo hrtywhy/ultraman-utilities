@@ -5,23 +5,43 @@
 async function proxyFetch(path: string, init?: RequestInit) {
   const res = await fetch(path, init);
   if (res.status === 401 || res.status === 403) {
-    throw new Error('Auth rejected — check the matching key in your .env file');
+    let detail = '';
+    try { detail = (await res.clone().json()).error || ''; } catch { /* not JSON */ }
+    throw new Error(detail || 'Auth rejected — missing/invalid API key (.env locally, Cloudflare Pages secret in prod)');
   }
+  if (res.status === 429) throw new Error('Rate limited by the upstream service — try again shortly');
   if (!res.ok) throw new Error(`HTTP ${res.status}`);
   return res;
 }
 
+// Geolocation: primary is ipapi.co via our proxy (it sends no CORS headers,
+// so it can't be called from the browser directly). If it fails or is
+// rate-limited, fall back to ipwho.is, which is keyless and CORS-enabled.
+async function geoLookup(ip: string) {
+  try {
+    const res = await proxyFetch(`/api/geoip/${ip}/json/`);
+    const data = await res.json();
+    if (data.error) throw new Error(data.reason || 'lookup failed');
+    return {
+      city: data.city, region: data.region, country: data.country_name,
+      lat: data.latitude, lon: data.longitude, org: data.org,
+    };
+  } catch {
+    const res = await fetch(`https://ipwho.is/${ip}`);
+    const data = await res.json();
+    if (data.success === false) throw new Error(data.message || 'lookup failed');
+    return {
+      city: data.city, region: data.region, country: data.country,
+      lat: data.latitude, lon: data.longitude, org: data.connection?.org || data.connection?.isp,
+    };
+  }
+}
 export async function geolocateIp(ip: string) {
-  const res = await fetch(`https://ipapi.co/${ip}/json/`);
-  const data = await res.json();
-  if (data.error) throw new Error(data.reason || 'lookup failed');
-  return `${data.city}, ${data.region}, ${data.country_name}, ${data.latitude}, ${data.longitude}, ${data.org || 'N/A'}`;
+  const g = await geoLookup(ip);
+  return `${g.city}, ${g.region}, ${g.country}, ${g.lat}, ${g.lon}, ${g.org || 'N/A'}`;
 }
 export async function geolocateIpCountry(ip: string) {
-  const res = await fetch(`https://ipapi.co/${ip}/json/`);
-  const data = await res.json();
-  if (data.error) throw new Error(data.reason || 'lookup failed');
-  return data.country_name as string;
+  return (await geoLookup(ip)).country as string;
 }
 
 export async function abuseIpDb(ip: string) {
@@ -43,6 +63,26 @@ export async function virusTotalDomain(domain: string) {
   const stats = attrs.last_analysis_stats;
   const total = Object.values(stats).reduce((a: number, b) => a + (b as number), 0);
   return `${stats.malicious > 0 ? 'Malicious' : 'Clean'}, ${stats.malicious}/${total} detections`;
+}
+
+export async function virusTotalFile(hash: string) {
+  const res = await fetch(`/api/virustotal/api/v3/files/${hash}`);
+  if (res.status === 404) throw new Error('Not found on VirusTotal');
+  if (res.status === 401 || res.status === 403) {
+    throw new Error('Auth rejected — check the matching key in your .env file');
+  }
+  if (!res.ok) throw new Error(`HTTP ${res.status}`);
+  const attrs = (await res.json()).data.attributes;
+  const stats = attrs.last_analysis_stats;
+  const total = Object.values(stats).reduce((a: number, b) => a + (b as number), 0);
+  const label = attrs.popular_threat_classification?.suggested_threat_label;
+  const name = attrs.meaningful_name || (attrs.names && attrs.names[0]) || 'unknown name';
+  return [
+    `${stats.malicious > 0 ? 'Malicious' : 'Clean'}, ${stats.malicious}/${total} detections`,
+    `Name: ${name}`,
+    `Type: ${attrs.type_description || 'N/A'}`,
+    label ? `Threat label: ${label}` : null,
+  ].filter(Boolean).join('\n  ');
 }
 
 export async function ipqs(ip: string) {
@@ -105,6 +145,7 @@ export async function maltiverseHostname(domain: string) {
 export async function shodan(ip: string) {
   const res = await proxyFetch(`/api/shodan/shodan/host/${ip}`);
   const data = await res.json();
+  if (data.error) throw new Error(data.error);
   return `${(data.ports || []).length} open ports, org: ${data.org || 'N/A'}`;
 }
 
@@ -118,7 +159,8 @@ export async function urlscanDomain(domain: string) {
 let icloudRangesCache: string[] | null = null;
 export async function icloudRelayCheck(ip: string) {
   if (!icloudRangesCache) {
-    const res = await fetch('https://mask-api.icloud.com/egress-ip-ranges.csv');
+    // Proxied — mask-api.icloud.com sends no CORS headers.
+    const res = await fetch('/api/icloudrelay/egress-ip-ranges.csv');
     if (!res.ok) throw new Error('HTTP ' + res.status);
     const text = await res.text();
     icloudRangesCache = text.split('\n').map((l) => l.trim()).filter((l) => l && !l.startsWith('#'));
@@ -138,7 +180,8 @@ function ipInCidr(ip: string, cidr: string) {
 }
 
 export async function macVendor(mac: string) {
-  const res = await fetch(`https://api.macvendors.com/${encodeURIComponent(mac)}`);
+  // Proxied — api.macvendors.com sends no CORS headers.
+  const res = await fetch(`/api/macvendors/${encodeURIComponent(mac)}`);
   const text = await res.text();
   if (!res.ok) throw new Error(res.status === 404 ? 'No vendor found for that MAC.' : `HTTP ${res.status} (possibly rate-limited)`);
   return text;
