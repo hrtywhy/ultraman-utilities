@@ -65,10 +65,10 @@ export function QrDecoder() {
         <button className="primary" onClick={fromFile}>Decode uploaded image</button>
         <button onClick={fromUrl}>Decode from URL</button>
         <button className="small" onClick={reset}>Reset</button>
-        <button className="small" onClick={() => copy(out)}>Copy result</button>
+        {out && <button className="small" onClick={() => copy(out)}>Copy result</button>}
       </div>
       {preview && <img id="qrPreview" style={{ display: 'block' }} src={preview} alt="QR preview" />}
-      <div className="result-box">{out}</div>
+      {out && <div className="result-box">{out}</div>}
       <div className="hint">Image-URL decoding depends on the host allowing cross-origin image reads; if it fails, download and upload the file instead.</div>
     </>
   );

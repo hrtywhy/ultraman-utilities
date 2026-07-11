@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import { refangText } from '../lib/refang';
-import { SourceReportRow, useSourceReport, Source } from '../components/SourceReport';
+import { SourceReportRow, useSourceReport, reportToText, reportHasData, Source } from '../components/SourceReport';
+import { useCopy } from '../lib/toast';
 import * as api from '../lib/api';
 
 const SOURCES: Source[] = [
@@ -17,23 +18,31 @@ const SOURCES: Source[] = [
   { id: 'icloud', label: 'iCloud Relay', run: api.icloudRelayCheck },
 ];
 
+type Geo = { country: string; code: string } | null;
+
 export function IpSearch() {
   const [ip, setIp] = useState('');
-  const [header, setHeader] = useState('');
+  const [target, setTarget] = useState('');
+  const [geo, setGeo] = useState<Geo>(null);
+  const [geoPending, setGeoPending] = useState(false);
   const [analyzed, setAnalyzed] = useState(false);
   const { rows, run } = useSourceReport(SOURCES);
+  const copy = useCopy();
 
   const analyze = async () => {
     const clean = refangText(ip.trim());
     if (!clean) return;
     setAnalyzed(true);
-    setHeader(`IP Address: ${clean} [resolving country…]`);
+    setTarget(clean);
+    setGeo(null);
+    setGeoPending(true);
     run(clean);
     try {
-      const country = await api.geolocateIpCountry(clean);
-      setHeader(`IP Address: ${clean} [${country}]`);
+      setGeo(await api.geolocateIpMeta(clean));
     } catch {
-      setHeader(`IP Address: ${clean} [country unknown]`);
+      setGeo(null);
+    } finally {
+      setGeoPending(false);
     }
   };
 
@@ -43,10 +52,28 @@ export function IpSearch() {
       <input id="ipInput" type="text" placeholder="195.178.110.137" value={ip} onChange={(e) => setIp(e.target.value)} />
       <div className="btn-row">
         <button className="primary" onClick={analyze}>Analyze</button>
+        {analyzed && reportHasData(rows) && (
+          <button className="small" onClick={() => copy(`IP: ${target}${geo ? ` [${geo.country}]` : ''}\n${reportToText(SOURCES, rows)}`)}>Copy result</button>
+        )}
       </div>
       {analyzed && (
         <div className="ip-report">
-          <div className="ip-report-header">{header}</div>
+          <div className="ip-report-header">
+            {geo?.code && (
+              <img
+                className="ip-report-flag"
+                src={`https://flagcdn.com/40x30/${geo.code}.png`}
+                srcSet={`https://flagcdn.com/80x60/${geo.code}.png 2x`}
+                alt={`${geo.country} flag`}
+              />
+            )}
+            <div className="ip-report-title">
+              <span className="ip-report-ip">{target}</span>
+              <span className="ip-report-country">
+                {geoPending ? 'resolving country…' : geo ? geo.country : 'country unknown'}
+              </span>
+            </div>
+          </div>
           <div>
             {SOURCES.map((s) => (
               <SourceReportRow key={s.id} label={s.label} state={rows[s.id]} />

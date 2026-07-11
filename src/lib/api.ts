@@ -1,6 +1,10 @@
 // All calls here hit relative /api/* paths handled by vite.config.ts's proxy.
 // The real third-party API keys live only in .env, read server-side — nothing
 // here ever touches a key directly, which is the whole point of the proxy.
+import { refangText } from './refang';
+
+// A source result is either plain text or text plus a link to render inline.
+export type SourceResult = string | { text: string; href: string; linkLabel?: string };
 
 async function proxyFetch(path: string, init?: RequestInit) {
   const res = await fetch(path, init);
@@ -14,6 +18,19 @@ async function proxyFetch(path: string, init?: RequestInit) {
   return res;
 }
 
+// Reduce any user input (URL, subdomain path, defanged text) to a bare
+// hostname. VirusTotal/OTX return 400/404 when handed a scheme or path, which
+// is what caused the Domain Search errors.
+export function cleanHostname(input: string): string {
+  let s = refangText(input.trim()).trim();
+  s = s.replace(/^[a-z][a-z0-9+.-]*:\/\//i, ''); // strip scheme
+  s = s.split('/')[0].split('?')[0].split('#')[0]; // strip path/query/fragment
+  s = s.split('@').pop() as string; // strip any userinfo
+  s = s.replace(/:\d+$/, ''); // strip port
+  s = s.replace(/\.$/, ''); // strip trailing dot
+  return s.toLowerCase();
+}
+
 // Geolocation: primary is ipapi.co via our proxy (it sends no CORS headers,
 // so it can't be called from the browser directly). If it fails or is
 // rate-limited, fall back to ipwho.is, which is keyless and CORS-enabled.
@@ -24,6 +41,7 @@ async function geoLookup(ip: string) {
     if (data.error) throw new Error(data.reason || 'lookup failed');
     return {
       city: data.city, region: data.region, country: data.country_name,
+      code: (data.country_code || '').toLowerCase(),
       lat: data.latitude, lon: data.longitude, org: data.org,
     };
   } catch {
@@ -32,6 +50,7 @@ async function geoLookup(ip: string) {
     if (data.success === false) throw new Error(data.message || 'lookup failed');
     return {
       city: data.city, region: data.region, country: data.country,
+      code: (data.country_code || '').toLowerCase(),
       lat: data.latitude, lon: data.longitude, org: data.connection?.org || data.connection?.isp,
     };
   }
@@ -40,8 +59,10 @@ export async function geolocateIp(ip: string) {
   const g = await geoLookup(ip);
   return `${g.city}, ${g.region}, ${g.country}, ${g.lat}, ${g.lon}, ${g.org || 'N/A'}`;
 }
-export async function geolocateIpCountry(ip: string) {
-  return (await geoLookup(ip)).country as string;
+// Country name + ISO code (for flag rendering in the IP report header).
+export async function geolocateIpMeta(ip: string) {
+  const g = await geoLookup(ip);
+  return { country: g.country as string, code: g.code as string };
 }
 
 export async function abuseIpDb(ip: string) {
@@ -58,31 +79,48 @@ export async function virusTotalIp(ip: string) {
   return `${stats.malicious > 0 ? 'Malicious' : 'Clean'}, ${stats.malicious}/${total} detections`;
 }
 export async function virusTotalDomain(domain: string) {
-  const res = await proxyFetch(`/api/virustotal/api/v3/domains/${domain}`);
+  const res = await proxyFetch(`/api/virustotal/api/v3/domains/${cleanHostname(domain)}`);
   const attrs = (await res.json()).data.attributes;
   const stats = attrs.last_analysis_stats;
   const total = Object.values(stats).reduce((a: number, b) => a + (b as number), 0);
   return `${stats.malicious > 0 ? 'Malicious' : 'Clean'}, ${stats.malicious}/${total} detections`;
 }
 
-export async function virusTotalFile(hash: string) {
-  const res = await fetch(`/api/virustotal/api/v3/files/${hash}`);
-  if (res.status === 404) throw new Error('Not found on VirusTotal');
-  if (res.status === 401 || res.status === 403) {
-    throw new Error('Auth rejected — check the matching key in your .env file');
+export type HashReport = {
+  hash: string;
+  status: 'loading' | 'ok' | 'err';
+  rows: { label: string; value: string }[];
+  error?: string;
+};
+
+// Structured VirusTotal file report for the Hash Search report view.
+export async function virusTotalFileReport(hash: string): Promise<HashReport> {
+  try {
+    const res = await fetch(`/api/virustotal/api/v3/files/${hash}`);
+    if (res.status === 404) return { hash, status: 'err', rows: [], error: 'Not found on VirusTotal' };
+    if (res.status === 401 || res.status === 403) {
+      const detail = await res.json().catch(() => ({}));
+      return { hash, status: 'err', rows: [], error: detail.error || 'Auth rejected — check VT_API_KEY' };
+    }
+    if (!res.ok) return { hash, status: 'err', rows: [], error: `HTTP ${res.status}` };
+    const attrs = (await res.json()).data.attributes;
+    const stats = attrs.last_analysis_stats;
+    const total = Object.values(stats).reduce((a: number, b) => a + (b as number), 0);
+    const label = attrs.popular_threat_classification?.suggested_threat_label;
+    const name = attrs.meaningful_name || (attrs.names && attrs.names[0]) || 'unknown name';
+    const size = attrs.size ? `${(attrs.size / 1024).toFixed(1)} KB` : 'N/A';
+    const rows = [
+      { label: 'Verdict', value: stats.malicious > 0 ? 'Malicious' : 'Clean' },
+      { label: 'Detections', value: `${stats.malicious}/${total} engines` },
+      { label: 'Name', value: name },
+      { label: 'Type', value: attrs.type_description || 'N/A' },
+      { label: 'Size', value: size },
+    ];
+    if (label) rows.push({ label: 'Threat label', value: label });
+    return { hash, status: 'ok', rows };
+  } catch (e) {
+    return { hash, status: 'err', rows: [], error: e instanceof Error ? e.message : 'lookup failed' };
   }
-  if (!res.ok) throw new Error(`HTTP ${res.status}`);
-  const attrs = (await res.json()).data.attributes;
-  const stats = attrs.last_analysis_stats;
-  const total = Object.values(stats).reduce((a: number, b) => a + (b as number), 0);
-  const label = attrs.popular_threat_classification?.suggested_threat_label;
-  const name = attrs.meaningful_name || (attrs.names && attrs.names[0]) || 'unknown name';
-  return [
-    `${stats.malicious > 0 ? 'Malicious' : 'Clean'}, ${stats.malicious}/${total} detections`,
-    `Name: ${name}`,
-    `Type: ${attrs.type_description || 'N/A'}`,
-    label ? `Threat label: ${label}` : null,
-  ].filter(Boolean).join('\n  ');
 }
 
 export async function ipqs(ip: string) {
@@ -100,7 +138,7 @@ export async function otxIp(ip: string) {
   return `${count} pulse${count === 1 ? '' : 's'} reference this IP`;
 }
 export async function otxDomain(domain: string) {
-  const res = await proxyFetch(`/api/otx/api/v1/indicators/domain/${domain}/general`);
+  const res = await proxyFetch(`/api/otx/api/v1/indicators/domain/${cleanHostname(domain)}/general`);
   const data = await res.json();
   const count = data.pulse_info ? data.pulse_info.count : 0;
   return `${count} pulse${count === 1 ? '' : 's'} reference this domain`;
@@ -125,9 +163,16 @@ export async function criminalIp(ip: string) {
 }
 
 export async function pulsedive(indicator: string) {
-  const res = await proxyFetch(`/api/pulsedive/api/info.php?indicator=${indicator}`);
-  const data = await res.json();
-  if (data.error) throw new Error(data.error);
+  // Pulsedive 404s (with an "Indicator not found" body) for anything not
+  // already in its database — that's a normal answer, not a failure.
+  const res = await fetch(`/api/pulsedive/api/info.php?indicator=${cleanHostname(indicator)}`);
+  if (res.status === 401 || res.status === 403) throw new Error('Auth rejected — check the PULSEDIVE_API_KEY');
+  const data = await res.json().catch(() => ({}));
+  if (data.error) {
+    if (/not found/i.test(data.error)) return 'Not in Pulsedive database';
+    throw new Error(data.error);
+  }
+  if (!res.ok) throw new Error(`HTTP ${res.status}`);
   return `Risk: ${data.risk || 'unknown'}`;
 }
 
@@ -137,9 +182,22 @@ export async function maltiverseIp(ip: string) {
   return `Classification: ${data.classification || 'unknown'}`;
 }
 export async function maltiverseHostname(domain: string) {
-  const res = await proxyFetch(`/api/maltiverse/hostname/${domain}`);
+  const res = await proxyFetch(`/api/maltiverse/hostname/${cleanHostname(domain)}`);
   const data = await res.json();
   return `Classification: ${data.classification || 'unknown'}`;
+}
+
+// Cisco Talos has no usable API — its reputation center sits behind Cloudflare
+// bot protection that returns 403 to any automated request (including from
+// other Cloudflare servers). Rather than fabricate a verdict, surface a
+// deep link to the official lookup so the analyst can open it in one click.
+export async function talosDomain(domain: string): Promise<SourceResult> {
+  const host = cleanHostname(domain);
+  return {
+    text: 'No public API — open the official reputation lookup:',
+    href: `https://talosintelligence.com/reputation_center/lookup?search=${host}`,
+    linkLabel: 'View on Talos ↗',
+  };
 }
 
 export async function shodan(ip: string) {
@@ -150,7 +208,7 @@ export async function shodan(ip: string) {
 }
 
 export async function urlscanDomain(domain: string) {
-  const res = await proxyFetch(`/api/urlscan/api/v1/search/?q=domain:${domain}`);
+  const res = await proxyFetch(`/api/urlscan/api/v1/search/?q=domain:${cleanHostname(domain)}`);
   const data = await res.json();
   const total = data.total ?? (data.results ? data.results.length : 0);
   return `${total} scan${total === 1 ? '' : 's'} on record for this domain`;

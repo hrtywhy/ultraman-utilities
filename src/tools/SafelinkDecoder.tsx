@@ -36,9 +36,9 @@ export function SafelinkDecoder() {
       />
       <div className="btn-row">
         <button className="primary" onClick={() => setOut(decodeSafelink(input))}>Decode</button>
-        <button className="small" onClick={() => copy(out)}>Copy result</button>
+        {out && <button className="small" onClick={() => copy(out)}>Copy result</button>}
       </div>
-      <div className="result-box">{out}</div>
+      {out && <div className="result-box">{out}</div>}
     </>
   );
 }

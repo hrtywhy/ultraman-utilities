@@ -19,9 +19,9 @@ export function WhoisSearch() {
       <div className="btn-row">
         <button className="primary" onClick={() => setOut(url())}>Generate URL</button>
         <button className="small" onClick={() => { const u = url(); if (u) window.open(u, '_blank'); }}>Open WHOIS</button>
-        <button className="small" onClick={() => copy(out)}>Copy result</button>
+        {out && <button className="small" onClick={() => copy(out)}>Copy result</button>}
       </div>
-      <div className="result-box">{out}</div>
+      {out && <div className="result-box">{out}</div>}
     </>
   );
 }

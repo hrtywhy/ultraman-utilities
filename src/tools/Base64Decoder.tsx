@@ -97,14 +97,14 @@ export function Base64Decoder() {
       <textarea id="b64Input" placeholder="JABzAD0ATgBlAHcALQBPAGIAagBlAGMAdA..." value={input} onChange={(e) => setInput(e.target.value)} />
       <div className="btn-row">
         <button className="primary" onClick={run}>Decode</button>
-        <button className="small" onClick={() => copy(out)}>Copy result</button>
+        {out && <button className="small" onClick={() => copy(out)}>Copy result</button>}
       </div>
       {status.kind !== 'idle' && (
         <div className={'status-line' + (status.kind === 'ok' ? ' ok' : status.kind === 'err' ? ' err' : '')}>
           <span className="dot" />{status.msg}
         </div>
       )}
-      <div className="result-box">{out}</div>
+      {out && <div className="result-box">{out}</div>}
       <div className="hint">Tries UTF-16LE first (how PowerShell's <b>-EncodedCommand</b> encodes scripts), then UTF-8, then falls back to hex. Also recovers Base64 that's missing padding or has one dangling character from a partial copy-paste.</div>
     </>
   );

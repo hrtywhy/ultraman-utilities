@@ -57,9 +57,9 @@ export function RemoteFileFinder() {
       </div>
       <div className="btn-row">
         <button className="primary" onClick={generate}>Generate command</button>
-        <button className="small" onClick={() => copy(out)}>Copy result</button>
+        {out && <button className="small" onClick={() => copy(out)}>Copy result</button>}
       </div>
-      <div className="result-box">{out}</div>
+      {out && <div className="result-box">{out}</div>}
       <div className="hint">Only one filter at a time is supported, matching a single name pattern. If you don't include a wildcard, one is added around your filter automatically.</div>
     </>
   );
