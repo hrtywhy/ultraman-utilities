@@ -44,7 +44,7 @@ export default function App() {
       <div className="shell">
         <nav className={'sidebar' + (sidebarOpen ? ' open' : '')}>
           <div className="logo">
-            <div className="logo-mark" />
+            <img className="logo-mark" src="/skyshield-logo.png" alt="Skyshield Labs shield" />
             <div className="logo-name">Ultraman Utilities</div>
           </div>
           <div className="logo-sub">Tools for Ultraman Work</div>
