@@ -126,7 +126,10 @@ export async function virusTotalFileReport(hash: string): Promise<HashReport> {
 export async function ipqs(ip: string) {
   const res = await proxyFetch(`/api/ipqs/${ip}`);
   const data = await res.json();
-  if (data.success === false) throw new Error(data.message || 'lookup failed');
+  if (data.success === false) {
+    if (/key|unauthorized/i.test(data.message || '')) throw new Error('Missing/invalid key — set IPQS_API_KEY');
+    throw new Error(data.message || 'lookup failed');
+  }
   const isVpnProxy = data.vpn || data.proxy;
   return `VPN/Proxy: ${isVpnProxy ? 'True' : 'False'} (Type: ${data.connection_type || 'N/A'}, Risk: ${data.fraud_score})`;
 }
@@ -145,12 +148,19 @@ export async function otxDomain(domain: string) {
 }
 
 export async function apiVoidIp(ip: string) {
-  const res = await proxyFetch(`/api/apivoid/v2/ip-reputation`, {
+  // APIVoid answers a bad/absent key with 403 + {"error":"Unauthorized access
+  // key"}. Normalize that to a clear, consistent message instead of the raw
+  // vendor text.
+  const res = await fetch(`/api/apivoid/v2/ip-reputation`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ ip }),
   });
-  const data = await res.json();
+  const data = await res.json().catch(() => ({}));
+  if (res.status === 401 || res.status === 403 || /unauthorized|api key/i.test(data.error || '')) {
+    throw new Error('Missing/invalid key — set APIVOID_API_KEY');
+  }
+  if (!res.ok) throw new Error(`HTTP ${res.status}`);
   const engines = (data.blacklists && data.blacklists.engines) || {};
   const detections = Object.values(engines).filter((e: any) => e.detected).length;
   return `Blacklist Count : ${detections}`;
@@ -204,7 +214,17 @@ export async function shodan(ip: string) {
   const res = await proxyFetch(`/api/shodan/shodan/host/${ip}`);
   const data = await res.json();
   if (data.error) throw new Error(data.error);
-  return `${(data.ports || []).length} open ports, org: ${data.org || 'N/A'}`;
+  // Map each open port to its detected service (e.g. 22/ssh, 443/https) so the
+  // report shows *which* ports are open, not just how many.
+  const svcByPort = new Map<number, string>();
+  for (const s of data.data || []) {
+    const mod = s?._shodan?.module || s?.transport;
+    if (s?.port != null) svcByPort.set(s.port, mod ? `${s.port}/${mod}` : String(s.port));
+  }
+  const ports: number[] = data.ports || [];
+  if (!ports.length) return `No open ports · org: ${data.org || 'N/A'}`;
+  const list = ports.map((p) => svcByPort.get(p) || String(p)).join(', ');
+  return `${ports.length} open (${list}) · org: ${data.org || 'N/A'}`;
 }
 
 export async function urlscanDomain(domain: string) {
