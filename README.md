@@ -8,13 +8,13 @@ Variables to add as secrets:
 VT_API_KEY
 ABUSEIPDB_API_KEY
 OTX_API_KEY
-IPQS_API_KEY
-APIVOID_API_KEY
 CRIMINALIP_API_KEY
-PULSEDIVE_API_KEY
 MALTIVERSE_API_KEY
 SHODAN_API_KEY
 ```
+
+`PULSEDIVE_API_KEY` is optional — Pulsedive has a keyless free tier, so its
+row works without one (set the key for higher rate limits).
 
 Optional (proxied, not yet wired into any UI tool):
 `MXTOOLBOX_API_KEY`, `CENSYS_API_KEY_BASE64`, `ROSTI_API_KEY`, `ABUSECH_API_KEY`
@@ -43,7 +43,7 @@ npx wrangler pages dev dist
 
 | Tool | Live sources | Needs a key |
 |---|---|---|
-| IP Search | Geolocation, AbuseIPDB, VT, IPQS, OTX, IPVoid/APIVoid, Criminal IP, Pulsedive, Maltiverse, Shodan, iCloud Relay | Geolocation & iCloud Relay: no. Rest: yes |
+| IP Search | Geolocation, AbuseIPDB, VT, OTX, Criminal IP, Pulsedive, Maltiverse, Shodan, iCloud Relay | Geolocation, iCloud Relay & Pulsedive: no. Rest: yes |
 | Domain Search | urlscan.io, VT, OTX, Pulsedive, Maltiverse | urlscan.io: no. Rest: yes |
 | MAC Vendor Lookup | macvendors.com | No |
 | Hash Search, Safelink Decoder, QR Decoder, WHOIS Search, Base64 Decoder, Remote File Finder | — | No network calls needing a key |

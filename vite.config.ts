@@ -46,13 +46,6 @@ export default defineConfig(({ mode }) => {
       rewrite: (p) => p.replace(/^\/api\/maltiverse/, ''),
       headers: { Authorization: `Bearer ${env.MALTIVERSE_API_KEY || ''}` },
     },
-    '/api/apivoid': {
-      target: 'https://api.apivoid.com',
-      changeOrigin: true,
-      rewrite: (p) => p.replace(/^\/api\/apivoid/, ''),
-      headers: { 'X-API-Key': env.APIVOID_API_KEY || '', 'Content-Type': 'application/json' },
-    },
-
     // ---- Query-param-authenticated APIs (key injected into the URL server-side) ----
     '/api/shodan': {
       target: 'https://api.shodan.io',
@@ -64,17 +57,6 @@ export default defineConfig(({ mode }) => {
       changeOrigin: true,
       rewrite: (p) => appendKeyParam(p.replace(/^\/api\/pulsedive/, ''), 'key', env.PULSEDIVE_API_KEY || ''),
     },
-    '/api/ipqs': {
-      target: 'https://ipqualityscore.com',
-      changeOrigin: true,
-      // IPQS puts the key in the path itself: /api/json/ip/{key}/{ip}
-      // The frontend calls /api/ipqs/{ip} and we splice the key in here.
-      rewrite: (p) => {
-        const ip = p.replace(/^\/api\/ipqs\//, '');
-        return `/api/json/ip/${env.IPQS_API_KEY || ''}/${ip}`;
-      },
-    },
-
     // ---- No key required, proxied only to sidestep any CORS friction ----
     '/api/urlscan': {
       target: 'https://urlscan.io',

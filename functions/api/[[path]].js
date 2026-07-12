@@ -41,12 +41,6 @@ const HEADER_ROUTES = [
     headers: (env) => ({ Authorization: `Bearer ${env.MALTIVERSE_API_KEY || ''}` }),
   },
   {
-    prefix: '/api/apivoid',
-    target: 'https://api.apivoid.com',
-    requiredKey: 'APIVOID_API_KEY',
-    headers: (env) => ({ 'X-API-Key': env.APIVOID_API_KEY || '', 'Content-Type': 'application/json' }),
-  },
-  {
     prefix: '/api/mxtoolbox',
     target: 'https://api.mxtoolbox.com',
     requiredKey: 'MXTOOLBOX_API_KEY',
@@ -107,12 +101,13 @@ const HEADER_ROUTES = [
 // Services that take their key as a query param rather than a header.
 const QUERY_KEY_ROUTES = [
   { prefix: '/api/shodan', target: 'https://api.shodan.io', param: 'key', requiredKey: 'SHODAN_API_KEY', key: (env) => env.SHODAN_API_KEY },
-  { prefix: '/api/pulsedive', target: 'https://pulsedive.com', param: 'key', requiredKey: 'PULSEDIVE_API_KEY', key: (env) => env.PULSEDIVE_API_KEY },
+  // Pulsedive has a keyless free tier — forward with the key if set, without
+  // one otherwise (no requiredKey gate), so it still returns data on prod.
+  { prefix: '/api/pulsedive', target: 'https://pulsedive.com', param: 'key', key: (env) => env.PULSEDIVE_API_KEY },
 ];
 
-// Forwarding a request with a blank key produces confusing upstream errors
-// (IPQS even 404s because the key lives in the URL path). Fail fast instead
-// with a clear message the UI can surface.
+// Forwarding a request with a blank key produces confusing upstream errors.
+// Fail fast instead with a clear message the UI can surface.
 function missingKeyResponse(varName) {
   return new Response(
     JSON.stringify({ error: `API key not configured: set the ${varName} secret (Cloudflare Pages dashboard) or .env/.dev.vars locally` }),
@@ -124,14 +119,6 @@ export async function onRequest(context) {
   const { request, env } = context;
   const url = new URL(request.url);
   const path = url.pathname;
-
-  // IPQS puts the key in the URL path itself: /api/json/ip/{key}/{ip}
-  if (path.startsWith('/api/ipqs/')) {
-    if (!env.IPQS_API_KEY) return missingKeyResponse('IPQS_API_KEY');
-    const ip = path.slice('/api/ipqs/'.length);
-    const target = `https://ipqualityscore.com/api/json/ip/${env.IPQS_API_KEY}/${ip}`;
-    return fetch(target);
-  }
 
   for (const r of QUERY_KEY_ROUTES) {
     if (path.startsWith(r.prefix)) {

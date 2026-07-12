@@ -123,17 +123,6 @@ export async function virusTotalFileReport(hash: string): Promise<HashReport> {
   }
 }
 
-export async function ipqs(ip: string) {
-  const res = await proxyFetch(`/api/ipqs/${ip}`);
-  const data = await res.json();
-  if (data.success === false) {
-    if (/key|unauthorized/i.test(data.message || '')) throw new Error('Missing/invalid key — set IPQS_API_KEY');
-    throw new Error(data.message || 'lookup failed');
-  }
-  const isVpnProxy = data.vpn || data.proxy;
-  return `VPN/Proxy: ${isVpnProxy ? 'True' : 'False'} (Type: ${data.connection_type || 'N/A'}, Risk: ${data.fraud_score})`;
-}
-
 export async function otxIp(ip: string) {
   const res = await proxyFetch(`/api/otx/api/v1/indicators/IPv4/${ip}/general`);
   const data = await res.json();
@@ -147,25 +136,6 @@ export async function otxDomain(domain: string) {
   return `${count} pulse${count === 1 ? '' : 's'} reference this domain`;
 }
 
-export async function apiVoidIp(ip: string) {
-  // APIVoid answers a bad/absent key with 403 + {"error":"Unauthorized access
-  // key"}. Normalize that to a clear, consistent message instead of the raw
-  // vendor text.
-  const res = await fetch(`/api/apivoid/v2/ip-reputation`, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ ip }),
-  });
-  const data = await res.json().catch(() => ({}));
-  if (res.status === 401 || res.status === 403 || /unauthorized|api key/i.test(data.error || '')) {
-    throw new Error('Missing/invalid key — set APIVOID_API_KEY');
-  }
-  if (!res.ok) throw new Error(`HTTP ${res.status}`);
-  const engines = (data.blacklists && data.blacklists.engines) || {};
-  const detections = Object.values(engines).filter((e: any) => e.detected).length;
-  return `Blacklist Count : ${detections}`;
-}
-
 export async function criminalIp(ip: string) {
   const res = await proxyFetch(`/api/criminalip/v1/ip/summary?ip=${ip}`);
   const data = await res.json();
@@ -176,7 +146,6 @@ export async function pulsedive(indicator: string) {
   // Pulsedive 404s (with an "Indicator not found" body) for anything not
   // already in its database — that's a normal answer, not a failure.
   const res = await fetch(`/api/pulsedive/api/info.php?indicator=${cleanHostname(indicator)}`);
-  if (res.status === 401 || res.status === 403) throw new Error('Auth rejected — check the PULSEDIVE_API_KEY');
   const data = await res.json().catch(() => ({}));
   if (data.error) {
     if (/not found/i.test(data.error)) return 'Not in Pulsedive database';
