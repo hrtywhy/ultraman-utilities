@@ -6,6 +6,7 @@ import * as api from '../lib/api';
 
 const SOURCES: Source[] = [
   { id: 'geo', label: 'IP-Geolocation', run: api.geolocateIp },
+  { id: 'vpnproxy', label: 'VPN / Proxy', run: api.vpnProxy },
   { id: 'abuseipdb', label: 'AbuseIPDB', run: api.abuseIpDb },
   { id: 'vt', label: 'VT Scan', run: api.virusTotalIp },
   { id: 'otx', label: 'OTX', run: api.otxIp },

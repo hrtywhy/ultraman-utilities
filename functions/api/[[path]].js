@@ -96,6 +96,12 @@ const HEADER_ROUTES = [
     target: 'https://api.macvendors.com',
     headers: () => ({}),
   },
+  {
+    // No key needed (keyless free tier). VPN/proxy/Tor/datacenter detection.
+    prefix: '/api/ipapiis',
+    target: 'https://api.ipapi.is',
+    headers: () => ({}),
+  },
 ];
 
 // Services that take their key as a query param rather than a header.

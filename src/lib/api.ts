@@ -123,6 +123,21 @@ export async function virusTotalFileReport(hash: string): Promise<HashReport> {
   }
 }
 
+// VPN / Proxy / Tor / datacenter detection via ipapi.is (keyless).
+export async function vpnProxy(ip: string) {
+  const res = await fetch(`/api/ipapiis/?q=${ip}`);
+  if (!res.ok) throw new Error(`HTTP ${res.status}`);
+  const data = await res.json();
+  const flags: string[] = [];
+  if (data.is_vpn) flags.push('VPN');
+  if (data.is_proxy) flags.push('Proxy');
+  if (data.is_tor) flags.push('Tor');
+  if (data.is_abuser) flags.push('Abuser');
+  if (flags.length) return `Anonymizer detected: ${flags.join(', ')}${data.is_datacenter ? ' (datacenter)' : ''}`;
+  if (data.is_datacenter) return 'No VPN/Proxy/Tor — datacenter/hosting (not residential)';
+  return 'Clean — residential, no VPN/Proxy/Tor';
+}
+
 export async function otxIp(ip: string) {
   const res = await proxyFetch(`/api/otx/api/v1/indicators/IPv4/${ip}/general`);
   const data = await res.json();

@@ -78,6 +78,11 @@ export default defineConfig(({ mode }) => {
       changeOrigin: true,
       rewrite: (p) => p.replace(/^\/api\/macvendors/, ''),
     },
+    '/api/ipapiis': {
+      target: 'https://api.ipapi.is',
+      changeOrigin: true,
+      rewrite: (p) => p.replace(/^\/api\/ipapiis/, ''),
+    },
 
     // ---- Available but not yet wired into the UI (kept for future tools) ----
     '/api/mxtoolbox': {

@@ -54,7 +54,7 @@ export function reportHasData(rows: Record<string, RowState>) {
 function verdictClass(state: RowState) {
   if (state.status === 'err') return ' bad';
   if (state.status !== 'ok') return '';
-  if (/malicious|blacklist count\s*:\s*[1-9]|risk:\s*(high|critical)|confidence [5-9]\d%|confidence 100%/i.test(state.text)) return ' bad';
+  if (/malicious|anonymizer detected|blacklist count\s*:\s*[1-9]|risk:\s*(high|critical)|confidence [5-9]\d%|confidence 100%/i.test(state.text)) return ' bad';
   if (/^clean|classification: (whitelist|neutral)|risk: (none|low)|^0 pulse|not in .* database/i.test(state.text)) return ' good';
   return '';
 }
